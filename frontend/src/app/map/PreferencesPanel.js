@@ -5,7 +5,13 @@ import { useUser } from '@auth0/nextjs-auth0/client'
 
 const MONO = "'Barlow Condensed', 'Arial Narrow', sans-serif"
 const BODY = "'Inter', -apple-system, 'Segoe UI', sans-serif"
-const API = (process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000').replace('ws://', 'http://').replace('wss://', 'https://')
+function getApiBase() {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.origin}/_/backend`
+  }
+  return 'http://localhost:8000'
+}
 
 const PREFS_META = [
   {
@@ -72,7 +78,7 @@ export default function PreferencesPanel({ onClose }) {
 
   useEffect(() => {
     if (!user?.sub) return
-    fetch(`${API}/api/user/preferences?auth_user_id=${encodeURIComponent(user.sub)}`)
+    fetch(`${getApiBase()}/api/user/preferences?auth_user_id=${encodeURIComponent(user.sub)}`)
       .then(r => r.json())
       .then(data => {
         if (data.preferences) setPrefs(p => ({ ...p, ...data.preferences }))
@@ -87,7 +93,7 @@ export default function PreferencesPanel({ onClose }) {
     setSaving(true)
     setSaved(false)
     try {
-      await fetch(`${API}/api/user/preferences`, {
+      await fetch(`${getApiBase()}/api/user/preferences`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ auth_user_id: user.sub, preferences: next }),

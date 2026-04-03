@@ -12,6 +12,23 @@ import Sidebar from './Sidebar'
 import PreferencesPanel from './PreferencesPanel'
 import VibeFilter from './VibeFilter'
 
+function getApiBase() {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return `${window.location.origin}/_/backend`
+  }
+  return 'http://localhost:8000'
+}
+
+function getWsBase() {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/_/backend`
+  }
+  return 'ws://localhost:8000'
+}
+
 const GLOBAL_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400&family=Inter:wght@300;400;500&display=swap');
 
@@ -229,8 +246,7 @@ export default function MapComponent() {
       return
     }
 
-    const apiBase = (process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000')
-      .replace(/^ws(s?):\/\//, 'http$1://')
+    const apiBase = getApiBase()
 
     fetch(`${apiBase}/api/vibe-heatmap?vibe_index=${selectedVibe.index}`)
       .then(r => r.json())
@@ -315,12 +331,7 @@ export default function MapComponent() {
     setAgentLogs([])
     setResults(null)
 
-    let wsBase = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000'
-    // Enforce encrypted WebSocket in production
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-      wsBase = wsBase.replace(/^ws:\/\//, 'wss://')
-    }
-    const wsUrl = wsBase + '/api/ws/plan'
+    const wsUrl = getWsBase() + '/api/ws/plan'
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 

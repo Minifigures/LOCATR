@@ -14,15 +14,11 @@ langchain-google-genai==0.0.6
 googlemaps==4.10.0
 httpx==0.26.0
 
-# Snowflake
+# Snowflake (connector only, snowpark not used in app code)
 snowflake-connector-python>=3.6.0
-snowflake-snowpark-python>=1.11.1
 
 # Caching (optional)
 redis==5.0.1
-
-# Vector Search (optional)
-faiss-cpu>=1.7.4
 
 # Web Scraping
 firecrawl-py==0.0.5
@@ -36,8 +32,6 @@ auth0-python==4.6.0
 
 # Rate Limiting
 slowapi==0.1.9
-
-# Snowflake connector (already listed above)
 
 # Utilities
 geojson==3.1.0

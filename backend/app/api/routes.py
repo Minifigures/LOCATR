@@ -41,7 +41,7 @@ async def create_plan(
     auth_user_id = token_payload.get("sub") if token_payload else None
 
     initial_state = {
-        "raw_prompt": request.prompt,
+        "raw_prompt": body.prompt,
         "auth_user_id": auth_user_id,
         "parsed_intent": {},
         "complexity_tier": "tier_2",
@@ -76,6 +76,121 @@ async def create_plan(
         venues=result.get("ranked_results", []),
         execution_summary="Pipeline complete.",
     )
+
+
+@router.post("/plan/stream")
+@limiter.limit("10/minute")
+async def stream_plan(
+    body: PlanRequest,
+    request: Request,
+    token_payload: Optional[dict] = Depends(optional_auth),
+):
+    """
+    SSE streaming version of /plan. Sends agent logs as events, then the final result.
+    Works on Vercel (no WebSocket needed).
+    """
+    import json as _json
+    from app.graph import pathfinder_graph
+
+    auth_user_id = token_payload.get("sub") if token_payload else None
+
+    initial_state = {
+        "raw_prompt": body.prompt,
+        "auth_user_id": auth_user_id,
+        "parsed_intent": {},
+        "complexity_tier": "tier_2",
+        "active_agents": [],
+        "agent_weights": {},
+        "candidate_venues": [],
+        "vibe_scores": {},
+        "cost_profiles": {},
+        "risk_flags": {},
+        "veto": False,
+        "veto_reason": None,
+        "ranked_results": [],
+        "member_locations": body.member_locations or [],
+        "chat_history": body.chat_history or [],
+    }
+
+    if body.group_size > 1 or body.budget or body.location or body.vibe:
+        initial_state["parsed_intent"] = {
+            "group_size": body.group_size,
+            "budget": body.budget,
+            "location": body.location,
+            "vibe": body.vibe,
+        }
+
+    log_queue: queue.Queue = queue.Queue()
+    handler = WebSocketLogHandler(log_queue)
+    handler.setLevel(logging.DEBUG)
+
+    target_logger_names = [
+        "app.agents.commander",
+        "app.agents.scout",
+        "app.agents.vibe_matcher",
+        "app.agents.cost_analyst",
+        "app.agents.critic",
+        "app.agents.synthesiser",
+        "app.graph",
+    ]
+    target_loggers = [logging.getLogger(name) for name in target_logger_names]
+    for lg in target_loggers:
+        lg.addHandler(handler)
+        if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
+            lg.setLevel(logging.DEBUG)
+
+    async def event_generator():
+        done_event = asyncio.Event()
+        graph_result = {}
+        graph_error = None
+
+        async def run_graph():
+            nonlocal graph_result, graph_error
+            try:
+                graph_result = await pathfinder_graph.ainvoke(initial_state)
+            except Exception as exc:
+                logger.exception("Graph execution failed: %s", exc)
+                graph_error = exc
+            finally:
+                done_event.set()
+
+        graph_task = asyncio.create_task(run_graph())
+
+        while not done_event.is_set() or not log_queue.empty():
+            try:
+                entry = log_queue.get_nowait()
+                yield f"data: {_json.dumps({'type': 'log', 'node': entry['node'], 'message': entry['message']})}\n\n"
+            except queue.Empty:
+                if done_event.is_set():
+                    break
+                await asyncio.sleep(0.05)
+
+        await graph_task
+
+        while not log_queue.empty():
+            try:
+                entry = log_queue.get_nowait()
+                yield f"data: {_json.dumps({'type': 'log', 'node': entry['node'], 'message': entry['message']})}\n\n"
+            except queue.Empty:
+                break
+
+        for lg in target_loggers:
+            lg.removeHandler(handler)
+
+        if graph_error:
+            yield f"data: {_json.dumps({'type': 'error', 'message': str(graph_error)})}\n\n"
+        else:
+            result_data = PlanResponse(
+                venues=graph_result.get("ranked_results", []),
+                execution_summary="Pipeline complete.",
+                global_consensus=graph_result.get("global_consensus"),
+                user_profile=graph_result.get("user_profile"),
+                agent_weights=graph_result.get("agent_weights"),
+                action_request=graph_result.get("action_request"),
+            ).model_dump()
+            yield f"data: {_json.dumps({'type': 'result', 'data': result_data})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.websocket("/ws/plan")

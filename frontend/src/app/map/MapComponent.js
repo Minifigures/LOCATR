@@ -331,44 +331,60 @@ export default function MapComponent() {
     setAgentLogs([])
     setResults(null)
 
-    const wsUrl = getWsBase() + '/api/ws/plan'
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
+    const apiBase = getApiBase()
+    const abortController = new AbortController()
+    wsRef.current = { close: () => abortController.abort() }
 
-    ws.onopen = () => {
-      const payload = { prompt: query, member_locations: [] }
-      if (user?.sub) payload.auth_user_id = user.sub
-      ws.send(JSON.stringify(payload))
-    }
+    fetch(`${apiBase}/api/plan/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: query, member_locations: [] }),
+      signal: abortController.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
 
-    ws.onmessage = (event) => {
-      let msg
-      try { msg = JSON.parse(event.data) } catch { return }
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
 
-      if (msg.type === 'log') {
-        setActiveAgent(msg.node)
-        setAgentLogs((prev) => [
-          ...prev,
-          { agent: msg.node, message: msg.message, time: Date.now() },
-        ])
-      } else if (msg.type === 'result') {
-        setResults(msg.data)
-        setSearchState('results')
-        setActiveAgent(null)
-        if (msg.data?.action_request) setActionRequest(msg.data.action_request)
-        ws.close()
-      }
-    }
+          const lines = buffer.split('\n\n')
+          buffer = lines.pop() || ''
 
-    ws.onerror = () => {
-      setSearchState('idle')
-    }
+          for (const line of lines) {
+            const dataLine = line.replace(/^data: /, '')
+            if (!dataLine) continue
+            let msg
+            try { msg = JSON.parse(dataLine) } catch { continue }
 
-    ws.onclose = (e) => {
-      if (searchState === 'searching' && !e.wasClean) {
-        setSearchState('idle')
-      }
-    }
+            if (msg.type === 'log') {
+              setActiveAgent(msg.node)
+              setAgentLogs((prev) => [
+                ...prev,
+                { agent: msg.node, message: msg.message, time: Date.now() },
+              ])
+            } else if (msg.type === 'result') {
+              setResults(msg.data)
+              setSearchState('results')
+              setActiveAgent(null)
+              if (msg.data?.action_request) setActionRequest(msg.data.action_request)
+            } else if (msg.type === 'error') {
+              console.error('[Plan]', msg.message)
+              setSearchState('idle')
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          console.error('[Plan]', err)
+          setSearchState('idle')
+        }
+      })
   }
 
   useEffect(() => {

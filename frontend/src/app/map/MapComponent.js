@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
-import { useUser } from '@auth0/nextjs-auth0/client'
+import { useUser } from '@/lib/user-context'
 import SearchBar from './SearchBar'
 import AgentRow from './AgentRow'
 import AgentSidebar from './AgentSidebar'

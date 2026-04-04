@@ -15,14 +15,14 @@ googlemaps==4.10.0
 httpx==0.26.0
 
 # Snowflake
-snowflake-connector-python==3.6.0
-snowflake-snowpark-python==1.11.1
+snowflake-connector-python>=3.6.0
+snowflake-snowpark-python>=1.11.1
 
 # Caching (optional)
 redis==5.0.1
 
 # Vector Search (optional)
-faiss-cpu==1.7.4
+faiss-cpu>=1.7.4
 
 # Web Scraping
 firecrawl-py==0.0.5

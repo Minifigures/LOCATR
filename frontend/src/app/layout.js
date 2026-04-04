@@ -1,6 +1,6 @@
 import './globals.css'
 import { PT_Serif } from "next/font/google";
-import { UserProvider } from '@auth0/nextjs-auth0/client'
+import { UserProvider } from '@/lib/user-context'
 
 const ptSerif = PT_Serif({
   weight: "400",

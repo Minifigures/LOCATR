@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useUser } from '@auth0/nextjs-auth0/client'
+import { useUser } from '@/lib/user-context'
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400&display=swap');
@@ -229,12 +229,12 @@ export default function Home() {
               <span style={{ fontFamily: MONO, fontSize: 13, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.55)' }}>
                 {user.nickname || user.name}
               </span>
-              <a href="/api/auth/logout" className="cta" style={{ padding: '6px 16px 5px', fontSize: 13 }}>
+              <a href="/auth/logout" className="cta" style={{ padding: '6px 16px 5px', fontSize: 13 }}>
                 LOGOUT
               </a>
             </>
           ) : (
-            <a href="/api/auth/login" className="cta" style={{ fontSize: 13 }}>
+            <a href="/auth/login" className="cta" style={{ fontSize: 13 }}>
               LOG IN
             </a>
           )}
@@ -279,7 +279,7 @@ export default function Home() {
             <a href="/map" onClick={handleNavigate} className="cta">Get Started</a>
           )}
           {!user && !isLoading && (
-            <a href="/api/auth/login?returnTo=/map" className="cta" style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', fontSize: 14, color: 'rgba(255,255,255,0.50)' }}>
+            <a href="/auth/login?returnTo=/map" className="cta" style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', fontSize: 14, color: 'rgba(255,255,255,0.50)' }}>
               Sign In for Personalization
             </a>
           )}

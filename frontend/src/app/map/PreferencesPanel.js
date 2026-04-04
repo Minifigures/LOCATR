@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useUser } from '@auth0/nextjs-auth0/client'
+import { useUser } from '@/lib/user-context'
 
 const MONO = "'Barlow Condensed', 'Arial Narrow', sans-serif"
 const BODY = "'Inter', -apple-system, 'Segoe UI', sans-serif"

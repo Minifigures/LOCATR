@@ -37,3 +37,37 @@ app.include_router(api_router, prefix="/api")
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "pathfinder"}
+
+
+@app.get("/debug/imports")
+async def debug_imports():
+    """Debug endpoint to check if all imports work on Vercel."""
+    errors = []
+    try:
+        from app.graph import pathfinder_graph
+    except Exception as e:
+        errors.append(f"graph: {type(e).__name__}: {e}")
+    try:
+        from app.core.auth import require_auth, optional_auth
+    except Exception as e:
+        errors.append(f"auth: {type(e).__name__}: {e}")
+    try:
+        from app.services.snowflake import _get_connection
+    except Exception as e:
+        errors.append(f"snowflake: {type(e).__name__}: {e}")
+    try:
+        from app.services.gemini import generate_text
+    except Exception as e:
+        errors.append(f"gemini: {type(e).__name__}: {e}")
+    try:
+        import langgraph
+    except Exception as e:
+        errors.append(f"langgraph: {type(e).__name__}: {e}")
+    try:
+        import langchain
+    except Exception as e:
+        errors.append(f"langchain: {type(e).__name__}: {e}")
+
+    if errors:
+        return {"status": "errors", "errors": errors}
+    return {"status": "all_imports_ok"}

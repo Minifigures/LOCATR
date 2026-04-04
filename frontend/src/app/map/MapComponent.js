@@ -168,12 +168,13 @@ export default function MapComponent() {
   const [loaded, setLoaded] = useState(false)
   const [center, setCenter] = useState({ lng: -79.3470, lat: 43.6515 })
 
-  // Search state: 'idle' | 'searching' | 'results'
+  // Search state: 'idle' | 'searching' | 'results' | 'error'
   const [searchState, setSearchState] = useState('idle')
   const [activeAgent, setActiveAgent] = useState(null)
   const [agentLogs, setAgentLogs] = useState([])
   const [results, setResults] = useState(null)
   const [selectedVenueIdx, setSelectedVenueIdx] = useState(0)
+  const [searchError, setSearchError] = useState(null)
   const [actionRequest, setActionRequest] = useState(null)
 
   // WS cleanup on unmount
@@ -320,6 +321,7 @@ export default function MapComponent() {
     setSelectedVenueIdx(0)
     setActionRequest(null)
     setLastQuery('')
+    setSearchError(null)
   }
 
   const handleSearch = (query) => {
@@ -330,10 +332,13 @@ export default function MapComponent() {
     setActiveAgent(null)
     setAgentLogs([])
     setResults(null)
+    setSearchError(null)
 
     const apiBase = getApiBase()
     const abortController = new AbortController()
     wsRef.current = { close: () => abortController.abort() }
+
+    let receivedResult = false
 
     fetch(`${apiBase}/api/plan/stream`, {
       method: 'POST',
@@ -342,7 +347,9 @@ export default function MapComponent() {
       signal: abortController.signal,
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}. Please try again.`)
+        }
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
@@ -352,11 +359,18 @@ export default function MapComponent() {
           if (done) break
           buffer += decoder.decode(value, { stream: true })
 
-          const lines = buffer.split('\n\n')
-          buffer = lines.pop() || ''
+          // Split on double-newline (SSE event boundary)
+          const frames = buffer.split('\n\n')
+          buffer = frames.pop() || ''
 
-          for (const line of lines) {
-            const dataLine = line.replace(/^data: /, '')
+          for (const frame of frames) {
+            // Each frame could have multiple `data:` lines; extract them
+            const dataLines = frame
+              .split('\n')
+              .filter(l => l.startsWith('data:'))
+              .map(l => l.replace(/^data:\s?/, ''))
+
+            const dataLine = dataLines.join('')
             if (!dataLine) continue
             let msg
             try { msg = JSON.parse(dataLine) } catch { continue }
@@ -368,21 +382,33 @@ export default function MapComponent() {
                 { agent: msg.node, message: msg.message, time: Date.now() },
               ])
             } else if (msg.type === 'result') {
+              receivedResult = true
               setResults(msg.data)
               setSearchState('results')
               setActiveAgent(null)
               if (msg.data?.action_request) setActionRequest(msg.data.action_request)
             } else if (msg.type === 'error') {
               console.error('[Plan]', msg.message)
-              setSearchState('idle')
+              setSearchError(msg.message || 'Something went wrong during the search.')
+              setSearchState('error')
+              setActiveAgent(null)
             }
           }
+        }
+
+        // Stream ended but we never got a result or error event
+        if (!receivedResult) {
+          setSearchError('The search stream ended unexpectedly. Please try again.')
+          setSearchState('error')
+          setActiveAgent(null)
         }
       })
       .catch((err) => {
         if (err.name !== 'AbortError') {
           console.error('[Plan]', err)
-          setSearchState('idle')
+          setSearchError(err.message || 'Failed to connect to the search service.')
+          setSearchState('error')
+          setActiveAgent(null)
         }
       })
   }
@@ -616,7 +642,7 @@ export default function MapComponent() {
 
         {showPrefs && <PreferencesPanel onClose={() => setShowPrefs(false)} />}
 
-        {/* Sidebar — searching + results */}
+        {/* Sidebar — searching + results + error */}
         {searchState !== 'idle' && (
           <Sidebar
           searchState={searchState}
@@ -637,6 +663,7 @@ export default function MapComponent() {
           onDismissAction={() => setActionRequest(null)}
           userProfile={results?.user_profile}
           agentWeights={results?.agent_weights}
+          errorMessage={searchError}
           />
         )}
 

@@ -13,6 +13,7 @@ langchain-google-genai>=2.0.0
 # APIs
 googlemaps==4.10.0
 httpx==0.26.0
+certifi>=2026.10.23
 
 # Snowflake (connector only, snowpark not used in app code)
 snowflake-connector-python>=3.6.0
